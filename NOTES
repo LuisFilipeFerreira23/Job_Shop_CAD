@@ -1,0 +1,19 @@
+How to Run ONLY MAIN:
+
+---gcc main.c -o main -fopenmp   --->  ./main
+
+
+    "gcc" - compiler to be used
+    "main.c" - name of the file to be compiled
+    "-o" - output (precedes the executable to be created)
+    "main" - name of the executable that will be created
+    "-fopenmp" - library flag
+
+_______________________________________________________________//______________________________________________________
+
+Now that we have added Auxiliary Functions we run this:
+
+---gcc main.c Aux_Functions/*.c -o main -fopenmp
+
+    "Aux_Functions" - directory of auxiliary files
+    "/*.c" - every .c file inside the folder
