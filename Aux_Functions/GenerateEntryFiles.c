@@ -23,7 +23,7 @@ void generateData(int numJobs, int numMachines) {
 
   srand(time(NULL));
 
-  FILE *f = fopen("./Entry_Files/test.jss", "w");
+  FILE *f = fopen("./test.jss", "w");
 
   if (f == NULL) {
     printf("Error opening file!\n");

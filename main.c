@@ -5,7 +5,7 @@
 #include <unistd.h> // for sleep()
 
 #define BILLION 1000000000.0
-
+#define MAX_BUFFER 10000
 int main() {
 
   int numJobs, numMachines;
@@ -43,6 +43,14 @@ int main() {
      numthreads );
       } */
 
+  // Where the various different implementations of the algorithm will be called
+  // sequencialImplementation(numJobs, numMachines);
+
+  // Parallel Implementation:
+  // particionedParallelImplementation(x, y, z);
+  // sharedMemoryParallelImplementation(x, y, z);
+
+  // Stop the timer
   clock_gettime(CLOCK_REALTIME, &end);
 
   // time_spent = end - start
@@ -52,18 +60,21 @@ int main() {
   // Print the time spent in seconds
   printf("Execution time: %f seconds \n", time_spent);
 
+  int numCharacters = numJobs * numMachines * 4 + 10;
+
   // Initialize the string to empty
-  char finalString[200] = "";
+  char finalString[MAX_BUFFER] = "";
 
   // Call the function to read the file and store its content in finalString
-  readFiles("./Entry_Files/Entry_File_2.txt", finalString);
+  readFiles("./test.jss", finalString);
 
   // Initialize the array to store the file content (not implemented yet)
-  int dataArray[200][200] = {0, 0};
+  int dataArray[numJobs][2 * numMachines];
+  memset(dataArray, 0, sizeof(dataArray));
 
   // Call the function to convert the file content to an array (not implemented
   // yet)
-  fileToArray(finalString, dataArray);
+  fileToArray(finalString, numJobs, numMachines, dataArray);
 
   return 0;
 }
