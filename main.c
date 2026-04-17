@@ -1,50 +1,69 @@
-#include <stdio.h>
-#include <omp.h>
-#include <time.h>      // for clock_t, clock()
-#include <unistd.h>    // for sleep()
 #include "Aux_Functions/AuxFunctions.h"
+#include <omp.h>
+#include <stdio.h>
+#include <time.h>   // for clock_t, clock()
+#include <unistd.h> // for sleep()
 
-#define BILLION  1000000000.0
+#define BILLION 1000000000.0
 
 int main() {
 
-    // Measure the execution time of the code block
-    struct timespec start, end;
- 
-    // Start the timer
-    clock_gettime(CLOCK_REALTIME, &start);
-    
-/*     int N = 10;
-       
-    #pragma omp parallel for
-    for(int i=1; i<=N; i++) {
-        
-        #ifdef _OPENMP
-            int threadid = omp_get_thread_num();
-            int numthreads = omp_get_num_threads();
-        #else
-            int threadid = 0;
-            int numthreads = 0;
-        #endif
+  int numJobs, numMachines;
 
-        printf("Contador i %d na thread %d, num threads %d\n", i, threadid, numthreads );
-    } */
-    
-    clock_gettime(CLOCK_REALTIME, &end);
- 
-    // time_spent = end - start
-    double time_spent = (end.tv_sec - start.tv_sec) +
-                        (end.tv_nsec - start.tv_nsec) / BILLION;
- 
-    // Print the time spent in seconds
-    printf("Execution time: %f seconds \n", time_spent);
+  printf("Select the number of jobs and machines for the entry file "
+         "generation:\n");
 
-    // Initialize the string to empty
-    char finalString[200] = "";
-    
-    // Call the function to read the file and store its content in finalString
-    readFiles("./Entry_Files/Entry_File_2.txt", finalString);
+  printf("Number of Jobs:\n ");
+  scanf("%d", &numJobs);
+  printf("Number of Machines:\n");
+  scanf("%d", &numMachines);
 
-    return 0;
+  generateData(numJobs, numMachines);
+
+  // Measure the execution time of the code block
+  struct timespec start, end;
+
+  // Start the timer
+  clock_gettime(CLOCK_REALTIME, &start);
+
+  /*     int N = 10;
+
+      #pragma omp parallel for
+      for(int i=1; i<=N; i++) {
+
+          #ifdef _OPENMP
+              int threadid = omp_get_thread_num();
+              int numthreads = omp_get_num_threads();
+          #else
+              int threadid = 0;
+              int numthreads = 0;
+          #endif
+
+          printf("Contador i %d na thread %d, num threads %d\n", i, threadid,
+     numthreads );
+      } */
+
+  clock_gettime(CLOCK_REALTIME, &end);
+
+  // time_spent = end - start
+  double time_spent =
+      (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / BILLION;
+
+  // Print the time spent in seconds
+  printf("Execution time: %f seconds \n", time_spent);
+
+  // Initialize the string to empty
+  char finalString[200] = "";
+
+  // Call the function to read the file and store its content in finalString
+  readFiles("./Entry_Files/Entry_File_2.txt", finalString);
+
+  // Initialize the array to store the file content (not implemented yet)
+  int dataArray[200][200] = {0, 0};
+
+  // Call the function to convert the file content to an array (not implemented
+  // yet)
+  fileToArray(finalString, dataArray);
+
+  return 0;
 }
-

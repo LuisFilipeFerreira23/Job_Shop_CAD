@@ -17,3 +17,9 @@ Now that we have added Auxiliary Functions we run this:
 
     "Aux_Functions" - directory of auxiliary files
     "/*.c" - every .c file inside the folder
+
+_______________________________________________________________//______________________________________________________
+
+If we want to execute after compiling SUCCESSFULLY we can do:
+
+---gcc main.c Aux_Functions/*.c -o main -fopenmp && ./main
