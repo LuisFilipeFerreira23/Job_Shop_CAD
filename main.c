@@ -6,25 +6,56 @@
 
 #define BILLION 1000000000.0
 #define MAX_BUFFER 10000
+
 int main() {
 
   int numJobs, numMachines;
+  /*
+    printf("Select the number of jobs and machines for the entry file "
+           "generation:\n");
 
-  printf("Select the number of jobs and machines for the entry file "
-         "generation:\n");
+    printf("Number of Jobs:\n ");
+    scanf("%d", &numJobs);
+    printf("Number of Machines:\n");
+    scanf("%d", &numMachines);
 
-  printf("Number of Jobs:\n ");
-  scanf("%d", &numJobs);
-  printf("Number of Machines:\n");
-  scanf("%d", &numMachines);
-
-  generateData(numJobs, numMachines);
-
+    generateData(numJobs, numMachines);
+   */
   // Measure the execution time of the code block
   struct timespec start, end;
 
   // Start the timer
   clock_gettime(CLOCK_REALTIME, &start);
+
+  // Initialize the string to empty
+  char finalString[MAX_BUFFER] = "";
+
+  // Call the function to read the file and store its content in finalString
+  readFiles("./test.jss", finalString);
+
+  // Extract numJobs and numMachines from the beginning of finalString
+  printf("[LOG] Extracting numJobs and numMachines from finalString...\n");
+  sscanf(finalString, "%d %d", &numJobs, &numMachines);
+  printf("[LOG] Extracted: numJobs = %d, numMachines = %d\n", numJobs,
+         numMachines);
+
+  int numCharacters = numJobs * numMachines * 4 + 10;
+
+  // Initialize the array to store the file content (not implemented yet)
+  int dataArray[numJobs][2 * numMachines];
+  memset(dataArray, 0, sizeof(dataArray));
+
+  // Call the function to convert the file content to an array (not implemented
+  // yet)
+  fileToArray(finalString, numJobs, numMachines, dataArray);
+
+  // Stop the timer and calculate time spent
+  clock_gettime(CLOCK_REALTIME, &end);
+  double time_spent =
+      (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / BILLION;
+
+  // Print the time spent in seconds
+  printf("Execution time: %f seconds \n", time_spent);
 
   /*     int N = 10;
 
@@ -52,29 +83,6 @@ int main() {
 
   // Stop the timer
   clock_gettime(CLOCK_REALTIME, &end);
-
-  // time_spent = end - start
-  double time_spent =
-      (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / BILLION;
-
-  // Print the time spent in seconds
-  printf("Execution time: %f seconds \n", time_spent);
-
-  int numCharacters = numJobs * numMachines * 4 + 10;
-
-  // Initialize the string to empty
-  char finalString[MAX_BUFFER] = "";
-
-  // Call the function to read the file and store its content in finalString
-  readFiles("./test.jss", finalString);
-
-  // Initialize the array to store the file content (not implemented yet)
-  int dataArray[numJobs][2 * numMachines];
-  memset(dataArray, 0, sizeof(dataArray));
-
-  // Call the function to convert the file content to an array (not implemented
-  // yet)
-  fileToArray(finalString, numJobs, numMachines, dataArray);
 
   return 0;
 }
