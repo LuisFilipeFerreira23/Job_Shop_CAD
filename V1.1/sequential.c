@@ -4,20 +4,23 @@
 #define MAX_MACHINES 50
 #define MAX_OPS 2500
 
+/* DATA STRUCTURE
+   Represents a single task (Operation) within a job. */
 typedef struct
 {
-    int machineID;
-    int duration;
-    int startTime;
-    int nextOpIndex;
+    int machineID;   // Which machine is needed
+    int duration;    // How long the task takes
+    int startTime;   // Calculated start time (result)
+    int nextOpIndex; // Index-based "pointer" to the next task in this job
 } Operation;
 
-// Global static arrays (Pre-allocated memory, no pointers)
+/* GLOBAL MEMORY POOL
+   Pre-allocated arrays to store all data without using pointers or malloc. */
 Operation memoryPool[MAX_OPS];
-int firstOpOfJob[MAX_JOBS];
-int machineFreeTime[MAX_MACHINES];
-int jobReadyTime[MAX_JOBS];
-int opsDone[MAX_JOBS];
+int firstOpOfJob[MAX_JOBS];        // Stores the index of the first operation for each job
+int machineFreeTime[MAX_MACHINES]; // Tracks when each machine is next available
+int jobReadyTime[MAX_JOBS];        // Tracks when each job is ready for its next operation
+int opsDone[MAX_JOBS];             // Counter for how many operations are finished per job
 
 int main()
 {
@@ -35,7 +38,8 @@ int main()
         return 1;
     }
 
-    // 1. DATA INITIALIZATION (Sequential Reading)
+    /* 1. DATA INITIALIZATION
+       Reads the file and builds the "linked list" of operations using array indices. */
     int opCounter = 0;
     for (int i = 0; i < numJobs; i++)
     {
@@ -50,13 +54,9 @@ int main()
             fscanf(file, "%d %d", &memoryPool[opCounter].machineID, &memoryPool[opCounter].duration);
 
             if (j == 0)
-            {
-                firstOpOfJob[i] = opCounter;
-            }
+                firstOpOfJob[i] = opCounter; // Mark the start of the job
             else
-            {
-                memoryPool[previousOpIdx].nextOpIndex = opCounter;
-            }
+                memoryPool[previousOpIdx].nextOpIndex = opCounter; // Link previous op to this one
 
             previousOpIdx = opCounter;
             opCounter++;
@@ -67,21 +67,24 @@ int main()
     for (int i = 0; i < MAX_MACHINES; i++)
         machineFreeTime[i] = 0;
 
-    // 2. SCHEDULING SIMULATION (Sequential Logic)
+    /* 2. SCHEDULING SIMULATION
+       Core Logic: At each step, we look at all available jobs and pick the one
+       that can start its next operation the earliest. */
     int completedTotal = 0;
     int totalOps = numJobs * numMachines;
 
     while (completedTotal < totalOps)
     {
         int bestJob = -1;
-        int earliestStart = 2147483647; // Max int
+        int earliestStart = 2147483647; // Initialize with maximum integer value
 
-        // Search through all jobs for the next operation that can start soonest
+        /* SEARCH PHASE
+           We check every job to see which one "wins" the next time slot. */
         for (int j = 0; j < numJobs; j++)
         {
             if (opsDone[j] < numMachines)
             {
-                // Navigate through the linked indices in the pool to the current operation
+                // Traverse the index-links to find the current active operation for Job 'j'
                 int currentIdx = firstOpOfJob[j];
                 for (int s = 0; s < opsDone[j]; s++)
                 {
@@ -90,12 +93,12 @@ int main()
 
                 int mID = memoryPool[currentIdx].machineID;
 
-                // Calculate when this operation could start
+                // An operation can only start when the JOB is ready AND the MACHINE is free
                 int potentialStart = (jobReadyTime[j] > machineFreeTime[mID])
                                          ? jobReadyTime[j]
                                          : machineFreeTime[mID];
 
-                // If this job can start earlier than our current best candidate, select it
+                // Greedy Selection: Pick the job that can start soonest
                 if (potentialStart < earliestStart)
                 {
                     earliestStart = potentialStart;
@@ -104,9 +107,11 @@ int main()
             }
         }
 
-        // 3. COMMIT THE CHOSEN OPERATION
+        /* 3. COMMIT PHASE
+           Once the "bestJob" is found, we officially schedule it. */
         if (bestJob != -1)
         {
+            // Find the operation again to update its details
             int currentIdx = firstOpOfJob[bestJob];
             for (int s = 0; s < opsDone[bestJob]; s++)
             {
@@ -119,7 +124,8 @@ int main()
             op->startTime = earliestStart;
             int finish = earliestStart + op->duration;
 
-            // Update machine and job availability for the next round of the loop
+            /* UPDATE RESOURCES
+               Mark the machine and the job as 'busy' until the finish time. */
             machineFreeTime[mID] = finish;
             jobReadyTime[bestJob] = finish;
 
@@ -128,10 +134,11 @@ int main()
         }
     }
 
-    // 4. FINAL CALCULATIONS AND OUTPUT
+    /* 4. FINAL CALCULATIONS AND OUTPUT */
     int makespan = 0;
     for (int i = 0; i < numMachines; i++)
     {
+        // The makespan is the time when the last machine finishes all its work
         if (machineFreeTime[i] > makespan)
             makespan = machineFreeTime[i];
     }
@@ -139,6 +146,7 @@ int main()
     printf("%d\n", makespan);
     for (int i = 0; i < numJobs; i++)
     {
+        // Print start times for each job's operations in sequence
         int currentIdx = firstOpOfJob[i];
         while (currentIdx != -1)
         {
