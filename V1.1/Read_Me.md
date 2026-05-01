@@ -1,3 +1,41 @@
+# Explicação do algoritmo utilizado:
+
+- Algoritmo de Escalonamento: Seleção Ambiciosa (Greedy) pelo Tempo de Início Mais Cedo (EST)
+O programa utiliza uma abordagem Greedy Constructive (Ambiciosa Construtiva) para resolver o problema de Job Shop Scheduling. O objetivo é construir o calendário passo a passo, tomando a decisão localmente ideal em cada iteração.
+
+- Etapas do Lógica Central
+Seleção Iterativa: 
+O algoritmo corre continuamente até que todas as operações de todos os trabalhos tenham um tempo de início definido.
+
+Pesquisa de Candidatos: 
+Em cada iteração, o programa verifica a próxima operação pendente de cada trabalho que ainda não foi concluído.
+
+Cálculo de Restrições: 
+Para cada operação candidata, o sistema calcula o tempo de início mais cedo possível considerando dois fatores:
+    Prontidão do Trabalho: 
+    O momento em que a operação anterior do mesmo trabalho terminou.
+
+    Disponibilidade da Máquina: 
+    O momento em que a máquina necessária ficará livre após terminar a tarefa anterior.
+
+A Escolha "Greedy": 
+Entre todos os candidatos, o algoritmo seleciona a operação que pode começar mais cedo no tempo absoluto.
+
+Atualização de Estado: 
+Após selecionar a operação, o tempo de disponibilidade da máquina e a prontidão do trabalho são atualizados com base no novo tempo de conclusão.
+
+- Otimização Paralela (OpenMP)
+Para processar grandes volumes de dados (como o ficheiro gg150.jss), a pesquisa pelo melhor candidato foi paralelizada:
+Divisão de Trabalho: 
+A lista de trabalhos é dividida por vários núcleos do CPU (threads). Cada thread identifica o melhor candidato dentro do seu grupo.
+    Consolidação Segura: 
+    É utilizada uma Secção Crítica (#pragma omp critical) para comparar os resultados de todas as threads e escolher o vencedor global, garantindo que não existam erros de escrita simultânea na memória.
+    
+    Métrica de Sucesso: 
+    Makespan - O objetivo final é minimizar o Makespan — o tempo total decorrido desde o início da primeira tarefa até à conclusão da última operação na fábrica.
+
+----
+
 # Notes:
 
 Both sequential.c and paralel.c are commented to ensure the lines are clearer
