@@ -1,6 +1,7 @@
 #include "Aux_Functions/AuxFunctions.h"
 #include <omp.h>
 #include <stdio.h>
+#include <string.h>
 #include <time.h>   // for clock_t, clock()
 #include <unistd.h> // for sleep()
 
@@ -37,58 +38,113 @@ void fileToArray(const char *finalString) {
     }
   }
 
-  // Initialize the array to store the file content (not implemented yet)
-  int dataArray[numJobs][2 * numMachines];
-  memset(dataArray, 0, sizeof(dataArray));
+  // Arrays to store machine and duration for each operation of each job
+  int jobMachines[numJobs][numMachines]; // which machine for each operation
+  int operationDurations[numJobs][numMachines]; // duration for each operation
 
-  // Parse the remaining numbers into pairs
+  // Initialize the arrays to zero and ensure they are properly sized based on
+  // numJobs and numMachines
+  memset(jobMachines, 0, sizeof(jobMachines));
+  memset(operationDurations, 0, sizeof(operationDurations));
+
+  // Parse the pairs [machine, duration] for each job
   int job_idx = 0;
-  int pair_count = 0;
+  int operation_idx = 0;
 
-  // Loop through the string to extract pairs of numbers for each job
   while (i < len && job_idx < numJobs) {
-    // Check if the current character is a digit
     if (finalString[i] >= '0' && finalString[i] <= '9') {
       int val = 0;
-
-      // Build the number until we hit a non-digit character
       while (i < len && finalString[i] >= '0' && finalString[i] <= '9') {
         val = val * 10 + (finalString[i] - '0');
         i++;
       }
 
-      // Store in the array
-      // pair_count tracks the position within the 200-int row
-      dataArray[job_idx][pair_count] = val;
-      pair_count++;
+      // Alternate between machine and duration
+      if (operation_idx % 2 == 0) {
+        // Even: this is a machine ID
+        jobMachines[job_idx][operation_idx / 2] = val;
+      } else {
+        // Odd: this is a duration
+        operationDurations[job_idx][operation_idx / 2] = val;
+        operation_idx++; // only increment after we get both machine and
+                         // duration
 
-      // Once we have filled (2 * numMachines) for one job, move to next row
-      if (pair_count == (2 * numMachines)) {
-        job_idx++;
-        pair_count = 0;
+        if (operation_idx / 2 == numMachines) {
+          job_idx++;
+          operation_idx = 0;
+        }
+        continue;
       }
+      operation_idx++;
     } else {
       i++;
     }
   }
 
-  /*
-   // Just to check the contents of the dataArray and if they are formating
-   // correctly
-   printf("\nData Array:\n");
-   int counter = 0;
-   for (int j = 0; j < numJobs; j++) {
-     for (int k = 0; k < 2 * numMachines; k++) {
-       printf("%d", dataArray[j][k]);
-       counter++;
-       if (counter == 2) {
-         printf("\n");
-         counter = 0;
-       }
-     }
-     printf("\n");
-   }
-    */
+  // Auxiliary array to track when each machine becomes free
+  int machinesFreeTime[numMachines];
+  memset(machinesFreeTime, 0, sizeof(machinesFreeTime));
+
+  // Schedule array to store actual entry and exit times for each job and
+  // machine
+  int scheduleArray[numJobs][2 * numMachines];
+  memset(scheduleArray, 0, sizeof(scheduleArray));
+
+  // Schedule each operation of each job on its respective machine
+  for (int j = 0; j < numJobs; j++) {
+    for (int op = 0; op < numMachines; op++) {
+      int machine = jobMachines[j][op];
+      int operation_duration = operationDurations[j][op];
+
+      // Check when this machine becomes free and schedule the operation
+      int startTime = machinesFreeTime[machine];
+      int endTime = startTime + operation_duration;
+
+      // Store entry time and exit time in schedule array
+      scheduleArray[j][2 * op] = startTime;   // entry time
+      scheduleArray[j][2 * op + 1] = endTime; // exit time
+
+      // Update machine free time
+      machinesFreeTime[machine] = endTime;
+    }
+  }
+
+  // Print job machines
+  printf("\nJob Machines:\n");
+  for (int j = 0; j < numJobs; j++) {
+    printf("Job %d: ", j);
+    for (int op = 0; op < numMachines; op++) {
+      printf("%d ", jobMachines[j][op]);
+    }
+    printf("\n");
+  }
+
+  // Print operation durations
+  printf("\nOperation Durations:\n");
+  for (int j = 0; j < numJobs; j++) {
+    printf("Job %d: ", j);
+    for (int op = 0; op < numMachines; op++) {
+      printf("%d ", operationDurations[j][op]);
+    }
+    printf("\n");
+  }
+
+  // Print auxiliary array with machine free times
+  printf("\nMachines Free Time:\n");
+  for (int m = 0; m < numMachines; m++) {
+    printf("Machine %d: %d\n", m, machinesFreeTime[m]);
+  }
+
+  // Print the schedule array with entry and exit times
+  printf("\nSchedule Array (Entry and Exit Times):\n");
+  for (int j = 0; j < numJobs; j++) {
+    printf("Job %d: ", j);
+    for (int op = 0; op < numMachines; op++) {
+      printf("M%d:[%d-%d] ", jobMachines[j][op], scheduleArray[j][2 * op],
+             scheduleArray[j][2 * op + 1]);
+    }
+    printf("\n");
+  }
 }
 
 //_____________________________________________________________________________________________________________________________________________________
@@ -131,7 +187,7 @@ int main() {
 
   // time_spent = end_clock - start_clock divided by CLOCKS_PER_SEC to get the
   // time in seconds
-  double time_spent = (end_clock - start_clock) / CLOCKS_PER_SEC;
+  double time_spent = (end_clock - start_clock) / 1000.0;
 
   // Print the time spent in seconds
   printf("Execution time: %f seconds \n", time_spent);
@@ -139,6 +195,7 @@ int main() {
   return 0;
 }
 
+//_____________________________________________________________________________________________________________________________________________________
 //_____________________________________________________________________________________________________________________________________________________
 //_____________________________________________________________________________________________________________________________________________________
 //_____________________________________________________________________________________________________________________________________________________
