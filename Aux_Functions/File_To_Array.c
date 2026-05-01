@@ -1,4 +1,4 @@
-#include <stdio.h>
+/* #include <stdio.h>
 #include <string.h>
 
 #define MAX_JOBS 100
@@ -54,21 +54,22 @@ void fileToArray(const char *finalString, int numJobs, int numMachines,
       i++;
     }
   }
-  /*
-    // Just to check the contents of the dataArray and if they are formating
-    // correctly
-    printf("\nData Array:\n");
-    int counter = 0;
-    for (int j = 0; j < numJobs; j++) {
-      for (int k = 0; k < 2 * numMachines; k++) {
-        printf("%d", dataArray[j][k]);
-        counter++;
-        if (counter == 2) {
-          printf("\n");
-          counter = 0;
-        }
+
+  // Just to check the contents of the dataArray and if they are formating
+  // correctly
+  printf("\nData Array:\n");
+  int counter = 0;
+  printf("numJobs: %d, numMachines: %d\n", numJobs, numMachines);
+  for (int j = 0; j < numJobs; j++) {
+    printf("bolas");
+    for (int k = 0; k < 2 * numMachines; k++) {
+      printf("Teste: %d", dataArray[j][k]);
+      counter++;
+      if (counter == 2) {
+        printf("\n");
+        counter = 0;
       }
-      printf("\n");
     }
-   */
-}
+    printf("\n");
+  }
+} */
