@@ -1,0 +1,64 @@
+// SECTION: THE PARALLEL REGION
+// #pragma omp parallel tells the compiler to create a team of threads.
+// Each thread executes the code inside this block simultaneously.
+#pragma omp parallel
+        {
+
+            // THREAD IDENTIFICATION: Each 'worker' gets a unique ID (tid)
+            int tid = omp_get_thread_num();
+
+            if (completedTotal == 0)
+                threadStartTimes[tid] = omp_get_wtime();
+
+            // THREAD-LOCAL STORAGE: These variables are 'private' to each thread
+            // so they can keep track of their own 'best find' without interference.
+            int localBestJob = -1;
+            int localEarliestStart = 2147483647;
+            // WORK SHARING: The 'omp for' directive automatically splits the
+            // 750 jobs among the available threads (e.g., thread 1 does jobs 1-50).
+
+#pragma omp for
+            for (int j = 0; j < numJobs; j++)
+            {
+                if (opsDone[j] < numMachines)
+                {
+
+                    // Each thread performs this calculation independently
+                    int currentIdx = firstOpOfJob[j];
+                    for (int s = 0; s < opsDone[j]; s++)
+                    {
+                        currentIdx = memoryPool[currentIdx].nextOpIndex;
+                    }
+                    int mID = memoryPool[currentIdx].machineID;
+                    int pStart = (jobReadyTime[j] > machineFreeTime[mID]) ? jobReadyTime[j] : machineFreeTime[mID];
+
+                    // Local comparison: thread checks its assigned jobs
+                    if (pStart < localEarliestStart)
+                    {
+                        localEarliestStart = pStart;
+                        localBestJob = j;
+                    }
+                }
+            }
+
+// SECTION: MUTUAL EXCLUSION (CRITICAL SECTION)
+// Only one thread at a time can enter this block.
+// This prevents 'Race Conditions' where two threads might try to
+// write to 'earliestStart' at the exact same millisecond.
+#pragma omp critical
+            {
+                if (localEarliestStart < earliestStart)
+                {
+
+                    // The global 'winning' job is determined here
+                    earliestStart = localEarliestStart;
+                    bestJob = localBestJob;
+                }
+            }
+
+            // SYNCHRONIZATION POINT: Threads record their finish time
+            // before the parallel region ends.
+
+            threadEndTimes[tid] = omp_get_wtime();
+            // END PARALLEL REGION: Threads 'join' back into a single process here.
+        }
