@@ -5,9 +5,9 @@
 int main()
 {
     // definir aqui o número de jobs e máquinas, e o nome do arquivo a ser criado
-    int jobs = 750;
-    int machines = 750;
-    FILE *f = fopen("gg150.jss", "w");
+    int jobs = 100;
+    int machines = 100;
+    FILE *f = fopen("gg100.jss", "w");
     if (!f)
         return 1;
 
@@ -17,7 +17,7 @@ int main()
     for (int i = 0; i < jobs; i++)
     {
         // alterar aqui o número de máquinas a serem alocadas para cada job
-        int m_ids[750];
+        int m_ids[100];
         for (int m = 0; m < machines; m++)
             m_ids[m] = m;
 
@@ -36,6 +36,6 @@ int main()
     }
     fclose(f);
     // alterar o printf para refletir o número de jobs e máquinas criados
-    printf("Created a heavy 750x750 matrix.\n");
+    printf("Created a heavy 100x100 matrix.\n");
     return 0;
 }

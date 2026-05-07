@@ -125,10 +125,11 @@ int main(int argc, char *argv[])
 
     // 3.3.3 Capture the end time
     clock_gettime(CLOCK_MONOTONIC, &end);
-
+    
     // 3.3.4 Calculate total elapsed time in seconds
     double totalTime = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
-
+    printf("Execution time: %f seconds\n", totalTime);
+    
     // --- 3.6 Write Output to File ---
     int makespan = 0;
     for (int i = 0; i < numMachines; i++)
@@ -136,6 +137,7 @@ int main(int argc, char *argv[])
         if (machineFreeTime[i] > makespan)
             makespan = machineFreeTime[i];
     }
+    
 
     FILE *outFile = fopen(outputFileName, "w");
     if (!outFile)
@@ -156,7 +158,6 @@ int main(int argc, char *argv[])
         }
         fprintf(outFile, "\n");
     }
-    fprintf(outFile, "Execution time: %f seconds\n", totalTime);
 
     fclose(outFile);
     return 0;
