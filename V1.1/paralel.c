@@ -1,15 +1,15 @@
+// 1. INCLUDES & MACROS
+// ==============================================================================
 #include <stdio.h>
-#include <omp.h> // The OpenMP API: Enables multi-core processing
+#include <stdlib.h>
+#include <omp.h>
 
 #define MAX_JOBS 750
 #define MAX_MACHINES 750
 #define MAX_OPS 600000
-#define MAX_THREADS 128 // Defines the maximum hardware threads the code can scale to
 
-// SECTION: DATA STRUCTURES
-// Here we define what an "Operation" looks like.
-// It tracks which machine it needs, how long it takes,
-// and when it is scheduled to start.
+// 2. DATA STRUCTURES & GLOBAL MEMORY
+// ==============================================================================
 typedef struct
 {
     int machineID;
@@ -18,41 +18,52 @@ typedef struct
     int nextOpIndex;
 } Operation;
 
-// SHARED MEMORY: These arrays are stored in a place where all threads
-// can read them to coordinate the schedule.
+// Array-based linked list
 Operation memoryPool[MAX_OPS];
 int firstOpOfJob[MAX_JOBS];
 int machineFreeTime[MAX_MACHINES];
 int jobReadyTime[MAX_JOBS];
 int opsDone[MAX_JOBS];
 
-// PERFORMANCE MONITORING: Global arrays to track individual thread behavior
-double threadStartTimes[MAX_THREADS];
-double threadEndTimes[MAX_THREADS];
-
-int main()
+// 3. MAIN PROGRAM
+// ==============================================================================
+int main(int argc, char *argv[])
 {
-    // SECTION: FILE LOADING
-    // The program opens the instruction file and reads the
-    // total number of jobs and machines.
-    int numJobs = 0, numMachines = 0;
-    FILE *file = fopen("gg150.jss", "r"); // Change to "gg03.jss" or "gg20.jss" for a smaller test case
-    if (!file)
+    // --- 3.1 Argument Validation ---
+    if (argc != 5)
     {
-        printf("Error: gg150.jss not found!\n"); // Change to "gg03.jss" or "gg20.jss" for a smaller test case
+        printf("Usage: %s <input_file.jss> <output_file.txt> <num_threads> <num_repetitions>\n", argv[0]);
         return 1;
     }
-    fscanf(file, "%d %d", &numJobs, &numMachines);
 
-    // SECTION: ORGANIZING THE TASKS
-    // We loop through every job and link its operations together
-    // in a chain, so the computer knows the required order of work.
+    char *inputFileName = argv[1];
+    char *outputFileName = argv[2];
+    int numThreads = atoi(argv[3]);
+    int numRepetitions = atoi(argv[4]);
+
+    if (numThreads <= 0 || numRepetitions <= 0)
+    {
+        printf("Error: Number of threads and repetitions must be greater than 0.\n");
+        return 1;
+    }
+
+    omp_set_num_threads(numThreads);
+
+    // --- 3.2 File Parsing ---
+    FILE *file = fopen(inputFileName, "r");
+    if (!file)
+    {
+        printf("Error: Input file %s not found!\n", inputFileName);
+        return 1;
+    }
+
+    int numJobs = 0, numMachines = 0;
+    fscanf(file, "%d %d", &numJobs, &numMachines);
     int opCounter = 0;
+
     for (int i = 0; i < numJobs; i++)
     {
         int previousOpIdx = -1;
-        opsDone[i] = 0;
-        jobReadyTime[i] = 0;
         for (int j = 0; j < numMachines; j++)
         {
             memoryPool[opCounter].nextOpIndex = -1;
@@ -67,155 +78,119 @@ int main()
     }
     fclose(file);
 
-    // SECTION: INITIALIZATION
-    // Before we start scheduling, we set all machines to be free at time 0.
-    for (int i = 0; i < numMachines; i++)
-        machineFreeTime[i] = 0;
-
-    // SECTION: SCHEDULING LOGIC
-    // We start a timer and begin a loop that continues until every
-    // single operation is scheduled.
-    double start = omp_get_wtime();
-
-    int completedTotal = 0;
     int totalOps = numJobs * numMachines;
+    double totalTime = 0.0;
 
-    while (completedTotal < totalOps)
+    // --- 3.3 Performance Measurement Loop ---
+    for (int rep = 0; rep < numRepetitions; rep++)
     {
-        int bestJob = -1;
-        int earliestStart = 2147483647;
-
-// SECTION: THE PARALLEL REGION
-// #pragma omp parallel tells the compiler to create a team of threads.
-// Each thread executes the code inside this block simultaneously.
-#pragma omp parallel
+        // 3.3.1 Reset State for Deterministic Runs
+        for (int i = 0; i < numJobs; i++)
         {
+            opsDone[i] = 0;
+            jobReadyTime[i] = 0;
+        }
+        for (int i = 0; i < numMachines; i++)
+        {
+            machineFreeTime[i] = 0;
+        }
+        int completedTotal = 0;
 
-            // THREAD IDENTIFICATION: Each 'worker' gets a unique ID (tid)
-            int tid = omp_get_thread_num();
+        // 3.3.2 Start Timing
+        double start = omp_get_wtime();
 
-            if (completedTotal == 0)
-                threadStartTimes[tid] = omp_get_wtime();
+        // 3.3.3 Core Scheduling Loop
+        while (completedTotal < totalOps)
+        {
+            int globalBestJob = -1;
+            int globalEarliestStart = 2147483647;
 
-            // THREAD-LOCAL STORAGE: These variables are 'private' to each thread
-            // so they can keep track of their own 'best find' without interference.
-            int localBestJob = -1;
-            int localEarliestStart = 2147483647;
-            // WORK SHARING: The 'omp for' directive automatically splits the
-            // 750 jobs among the available threads (e.g., thread 1 does jobs 1-50).
-
-#pragma omp for
+            // --- PARALLEL REGION: Search for the next best operation ---
+#pragma omp parallel for
             for (int j = 0; j < numJobs; j++)
             {
                 if (opsDone[j] < numMachines)
                 {
-
-                    // Each thread performs this calculation independently
+                    // Traverse logical linked list to find current operation
                     int currentIdx = firstOpOfJob[j];
                     for (int s = 0; s < opsDone[j]; s++)
                     {
                         currentIdx = memoryPool[currentIdx].nextOpIndex;
                     }
+
                     int mID = memoryPool[currentIdx].machineID;
                     int pStart = (jobReadyTime[j] > machineFreeTime[mID]) ? jobReadyTime[j] : machineFreeTime[mID];
 
-                    // Local comparison: thread checks its assigned jobs
-                    if (pStart < localEarliestStart)
+                    // --- CRITICAL SECTION: Update global best job and earliest start time ---
+#pragma omp critical
                     {
-                        localEarliestStart = pStart;
-                        localBestJob = j;
+                        if (pStart < globalEarliestStart)
+                        {
+                            globalEarliestStart = pStart;
+                            globalBestJob = j;
+                        }
                     }
                 }
             }
+            // --- END PARALLEL REGION ---
 
-// SECTION: MUTUAL EXCLUSION (CRITICAL SECTION)
-// Only one thread at a time can enter this block.
-// This prevents 'Race Conditions' where two threads might try to
-// write to 'earliestStart' at the exact same millisecond.
-#pragma omp critical
+            // --- 3.3.4 Sequential State Update ---
+            if (globalBestJob != -1)
             {
-                if (localEarliestStart < earliestStart)
+                int currentIdx = firstOpOfJob[globalBestJob];
+                for (int s = 0; s < opsDone[globalBestJob]; s++)
                 {
-
-                    // The global 'winning' job is determined here
-                    earliestStart = localEarliestStart;
-                    bestJob = localBestJob;
+                    currentIdx = memoryPool[currentIdx].nextOpIndex;
                 }
+                memoryPool[currentIdx].startTime = globalEarliestStart;
+                int finish = globalEarliestStart + memoryPool[currentIdx].duration;
+
+                // Advance time variables
+                machineFreeTime[memoryPool[currentIdx].machineID] = finish;
+                jobReadyTime[globalBestJob] = finish;
+
+                opsDone[globalBestJob]++;
+                completedTotal++;
             }
-
-            // SYNCHRONIZATION POINT: Threads record their finish time
-            // before the parallel region ends.
-
-            threadEndTimes[tid] = omp_get_wtime();
-            // END PARALLEL REGION: Threads 'join' back into a single process here.
         }
 
-        // SECTION: UPDATING THE TIMELINE
-        // Once the best job is found, we "lock it in" to the schedule,
-        // update the machine's busy timer, and mark the job as ready
-        // for its next step.
-        if (bestJob != -1)
+        // 3.3.5 End Timing
+        double end = omp_get_wtime();
+        totalTime += (end - start);
+    }
+
+    // --- 3.4 Calculate Metrics ---
+        double averageTime = totalTime / numRepetitions;
+        printf("Average execution time (%d repetitions): %f seconds\n", numRepetitions, averageTime);
+
+    // --- 3.5 Write Output to File ---
+        int makespan = 0;
+        for (int i = 0; i < numMachines; i++)
         {
-            int currentIdx = firstOpOfJob[bestJob];
-            for (int s = 0; s < opsDone[bestJob]; s++)
+            if (machineFreeTime[i] > makespan)
+                makespan = machineFreeTime[i];
+        }
+
+        FILE *outFile = fopen(outputFileName, "w");
+        if (!outFile)
+        {
+            printf("Error: Could not create output file %s\n", outputFileName);
+            return 1;
+        }
+
+        fprintf(outFile, "%d\n", makespan);
+
+        for (int i = 0; i < numJobs; i++)
+        {
+            int currentIdx = firstOpOfJob[i];
+            while (currentIdx != -1)
             {
+                fprintf(outFile, "%d ", memoryPool[currentIdx].startTime);
                 currentIdx = memoryPool[currentIdx].nextOpIndex;
             }
-            memoryPool[currentIdx].startTime = earliestStart;
-            int finish = earliestStart + memoryPool[currentIdx].duration;
-            machineFreeTime[memoryPool[currentIdx].machineID] = finish;
-            jobReadyTime[bestJob] = finish;
-            opsDone[bestJob]++;
-            completedTotal++;
+            fprintf(outFile, "\n");
         }
-    }
-    double end = omp_get_wtime();
 
-    // SECTION: PARALLEL DIAGNOSTICS
-    printf("\n--- Thread Execution Times ---\n");
-    int actualThreads = 0;
-
-// MASTER DIRECTIVE: Only the primary thread asks the system
-// how many workers were actually deployed.
-#pragma omp parallel
-    {
-#pragma omp master
-        actualThreads = omp_get_num_threads();
-    }
-
-    // Displays the efficiency of the parallel distribution
-    for (int i = 0; i < actualThreads; i++)
-    {
-        printf("Thread %d: Start = %.4f, End = %.4f, Duration = %.4f\n",
-               i, threadStartTimes[i], threadEndTimes[i], (threadEndTimes[i] - threadStartTimes[i]));
-    }
-
-    // SECTION: FINAL SCHEDULE OUTPUT
-    // 1. Makespan: The time the last machine finishes.
-    // 2. Start Times: When each operation in each job begins.
-    // 3. Total Runtime: How long the computer spent thinking.
-    printf("------------------------------\n");
-    printf("\nMakespan: ");
-    int makespan = 0;
-    for (int i = 0; i < numMachines; i++)
-    {
-        if (machineFreeTime[i] > makespan)
-            makespan = machineFreeTime[i];
-    }
-    printf("%d\n", makespan);
-
-    for (int i = 0; i < numJobs; i++)
-    {
-        int currentIdx = firstOpOfJob[i];
-        while (currentIdx != -1)
-        {
-            printf("%d ", memoryPool[currentIdx].startTime);
-            currentIdx = memoryPool[currentIdx].nextOpIndex;
-        }
-        printf("\n");
-    }
-
-    printf("Total Execution Time: %f seconds\n", (end - start));
-
-    return 0;
+        fclose(outFile);
+        return 0;
 }

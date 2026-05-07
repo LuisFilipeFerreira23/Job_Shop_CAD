@@ -1,14 +1,15 @@
+// 1. INCLUDES & MACROS
+// ==============================================================================
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 
 #define MAX_JOBS 750
 #define MAX_MACHINES 750
 #define MAX_OPS 600000
 
-// SECTION: DATA STRUCTURES
-// Defines an "Operation" as a single unit of work.
-// It keeps track of the machine needed, how long it takes,
-// and the final scheduled start time.
+// 2. DATA STRUCTURES & GLOBAL MEMORY
+// ==============================================================================
 typedef struct
 {
     int machineID;
@@ -17,39 +18,42 @@ typedef struct
     int nextOpIndex;
 } Operation;
 
-// SECTION: GLOBAL STATE
-// These arrays store the status of the entire system:
-// 1. memoryPool: The master list of all 600,000 operations.
-// 2. machineFreeTime: Tracks when each machine will finish its current task.
-// 3. jobReadyTime: Tracks when a job can move to its next step.
+// Array-based linked list
 Operation memoryPool[MAX_OPS];
 int firstOpOfJob[MAX_JOBS];
 int machineFreeTime[MAX_MACHINES];
 int jobReadyTime[MAX_JOBS];
 int opsDone[MAX_JOBS];
 
-int main()
+// 3. MAIN PROGRAM
+// ==============================================================================
+int main(int argc, char *argv[])
 {
-    // SECTION: DATA ACQUISITION
-    // Open the specification file and read how many Jobs and Machines exist.
-    int numJobs = 0, numMachines = 0;
-    FILE *file = fopen("gg150.jss", "r"); // Change to "gg03.jss" or "gg20.jss" for a smaller test case
-    if (!file)
+    // --- 3.1 Argument Validation ---
+    if (argc != 3)
     {
-        printf("Error: gg150.jss not found!\n"); // Change to "gg03.jss" or "gg20.jss" for a smaller test case
+        printf("Usage: %s <input_file.jss> <output_file.txt>\n", argv[0]);
         return 1;
     }
-    fscanf(file, "%d %d", &numJobs, &numMachines);
 
-    // SECTION: TASK LINKING
-    // For every job, we read its sequence of operations and link them
-    // together like a chain (Operation 1 -> Operation 2 -> etc).
+    char *inputFileName = argv[1];
+    char *outputFileName = argv[2];
+
+    // --- 3.2 File Parsing ---
+    FILE *file = fopen(inputFileName, "r");
+    if (!file)
+    {
+        printf("Error: Input file %s not found!\n", inputFileName);
+        return 1;
+    }
+
+    int numJobs = 0, numMachines = 0;
+    fscanf(file, "%d %d", &numJobs, &numMachines);
     int opCounter = 0;
+
     for (int i = 0; i < numJobs; i++)
     {
         int previousOpIdx = -1;
-        opsDone[i] = 0;
-        jobReadyTime[i] = 0;
         for (int j = 0; j < numMachines; j++)
         {
             memoryPool[opCounter].nextOpIndex = -1;
@@ -64,96 +68,96 @@ int main()
     }
     fclose(file);
 
-    for (int i = 0; i < numMachines; i++)
-        machineFreeTime[i] = 0;
-
-    // SECTION: TIME TRACKING
-    // Using high-precision clock to measure how long the single core works.
+    // 3.3 Declare timespec structures
     struct timespec start, end;
+
+    // 3.3.1 Capture the start time
     clock_gettime(CLOCK_MONOTONIC, &start);
 
-    int completedTotal = 0;
     int totalOps = numJobs * numMachines;
-
-    // SECTION: LINEAR SEARCH
-    // We keep looping until every operation in the factory is finished.
+    int completedTotal = 0;
+    
+    // 3.4 Core Scheduling Loop
     while (completedTotal < totalOps)
     {
-        int bestJob = -1;
-        int earliestStart = 2147483647;
+        int globalBestJob = -1;
+        int globalEarliestStart = 2147483647;
 
-        // The single thread loops through every job to see which one
-        // can start earliest based on machine and job availability.
         for (int j = 0; j < numJobs; j++)
         {
             if (opsDone[j] < numMachines)
             {
-                // Find the specific operation this job needs to do next.
                 int currentIdx = firstOpOfJob[j];
                 for (int s = 0; s < opsDone[j]; s++)
                 {
                     currentIdx = memoryPool[currentIdx].nextOpIndex;
                 }
 
-                // Determine the start time:
-                // Either when the machine is free OR when the job is ready.
                 int mID = memoryPool[currentIdx].machineID;
                 int pStart = (jobReadyTime[j] > machineFreeTime[mID]) ? jobReadyTime[j] : machineFreeTime[mID];
 
-                if (pStart < earliestStart)
+                if (pStart < globalEarliestStart)
                 {
-                    earliestStart = pStart;
-                    bestJob = j;
+                    globalEarliestStart = pStart;
+                    globalBestJob = j;
                 }
             }
         }
 
-        // SECTION: ASSIGNMENT
-        // Update the master schedule with the winning candidate.
-        if (bestJob != -1)
+        // --- 3.5 Sequential State Update ---
+        if (globalBestJob != -1)
         {
-            int currentIdx = firstOpOfJob[bestJob];
-            for (int s = 0; s < opsDone[bestJob]; s++)
+            int currentIdx = firstOpOfJob[globalBestJob];
+            for (int s = 0; s < opsDone[globalBestJob]; s++)
             {
                 currentIdx = memoryPool[currentIdx].nextOpIndex;
             }
-            memoryPool[currentIdx].startTime = earliestStart;
-            int finish = earliestStart + memoryPool[currentIdx].duration;
+            memoryPool[currentIdx].startTime = globalEarliestStart;
+            int finish = globalEarliestStart + memoryPool[currentIdx].duration;
+
             machineFreeTime[memoryPool[currentIdx].machineID] = finish;
-            jobReadyTime[bestJob] = finish;
-            opsDone[bestJob]++;
+            jobReadyTime[globalBestJob] = finish;
+
+            opsDone[globalBestJob]++;
             completedTotal++;
         }
     }
+
+    // 3.3.3 Capture the end time
     clock_gettime(CLOCK_MONOTONIC, &end);
 
-    // SECTION: RESULTS DISPLAY
-    printf("Execution finished.\n\n");
+    // 3.3.4 Calculate total elapsed time in seconds
+    double totalTime = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
 
-    // Calculate the "Makespan" (the point in time when the very last task finishes).
+    // --- 3.6 Write Output to File ---
     int makespan = 0;
     for (int i = 0; i < numMachines; i++)
     {
         if (machineFreeTime[i] > makespan)
             makespan = machineFreeTime[i];
     }
-    printf("Makespan: %d\n", makespan);
 
-    // Print the start time of every operation for every job.
+    FILE *outFile = fopen(outputFileName, "w");
+    if (!outFile)
+    {
+        printf("Error: Could not create output file %s\n", outputFileName);
+        return 1;
+    }
+
+    fprintf(outFile, "%d\n", makespan);
+
     for (int i = 0; i < numJobs; i++)
     {
         int currentIdx = firstOpOfJob[i];
         while (currentIdx != -1)
         {
-            printf("%d ", memoryPool[currentIdx].startTime);
+            fprintf(outFile, "%d ", memoryPool[currentIdx].startTime);
             currentIdx = memoryPool[currentIdx].nextOpIndex;
         }
-        printf("\n");
+        fprintf(outFile, "\n");
     }
+    fprintf(outFile, "Execution time: %f seconds\n", totalTime);
 
-    // Report total time spent calculating the schedule on a single core.
-    double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
-    printf("\nTotal Execution Time (Sequential): %f seconds\n", elapsed);
-
+    fclose(outFile);
     return 0;
 }
