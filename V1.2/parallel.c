@@ -78,6 +78,8 @@ int main(int argc, char *argv[])
     }
     fclose(file);
 
+
+// Algoritmo comum //
     int totalOps = numJobs * numMachines;
     double totalTime = 0.0;
 

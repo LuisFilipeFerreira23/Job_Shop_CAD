@@ -29,6 +29,7 @@ int opsDone[MAX_JOBS];
 // ==============================================================================
 int main(int argc, char *argv[])
 {
+
     // --- 3.1 Argument Validation ---
     if (argc != 3)
     {
@@ -74,6 +75,8 @@ int main(int argc, char *argv[])
     // 3.3.1 Capture the start time
     clock_gettime(CLOCK_MONOTONIC, &start);
 
+
+// ALGORITMO COMUM //
     int totalOps = numJobs * numMachines;
     int completedTotal = 0;
     
