@@ -11,8 +11,6 @@
 #define MAX_OPS 100
 
 int numJobs = 0, numMachines = 0;
-int finalBestJob = -1;
-int finalBestStartTime = 9999999;
 
 // Funcão auxiliar para obter o máximo entre dois valores, usada para calcular o tempo de início de cada operação
 int getMax(int a, int b)
@@ -56,8 +54,8 @@ void fileToArray(const char *finalString)
   }
 
   // Arrays to store machine and duration for each operation of each job
-  int jobMachines[numJobs][numMachines];        // which machine for each operation
-  int operationDurations[numJobs][numMachines]; // duration for each operation
+  int jobMachines[MAX_JOBS][MAX_OPS];        // which machine for each operation
+  int operationDurations[MAX_JOBS][MAX_OPS]; // duration for each operation
 
   // Initialize the arrays to zero and ensure they are properly sized based on
   // numJobs and numMachines
@@ -147,20 +145,20 @@ void fileToArray(const char *finalString)
   /***********ALGORITMO SHIFTING BOTTLENECK*****************************/
 
   // Auxiliary array to track when each machine becomes free
-  int machinesFreeTime[numMachines];
+  int machinesFreeTime[MAX_OPS];
   memset(machinesFreeTime, 0, sizeof(machinesFreeTime));
 
   // Schedule array to store actual entry and exit times for each job and
   // machine
-  int scheduleArray[numJobs][2 * numMachines];
+  int scheduleArray[MAX_JOBS][2 * MAX_OPS];
   memset(scheduleArray, 0, sizeof(scheduleArray));
 
   // Regista a que segundo cada job termina asua operação atual e pode ir para a próxima operação, ou seja, o tempo em que o job fica livre para a próxima operação
-  int jobsFreeTime[numJobs];
+  int jobsFreeTime[MAX_JOBS];
   memset(jobsFreeTime, 0, sizeof(jobsFreeTime));
 
   // Regista a operação atual de cada job, ou seja, qual é a próxima operação a ser agendada para cada job
-  int currentOperation[numJobs];
+  int currentOperation[MAX_JOBS];
   memset(currentOperation, 0, sizeof(currentOperation));
 
   int jobsDone = 0;      // Contador de quantos jobs já completaram todas as suas operações
@@ -173,9 +171,11 @@ void fileToArray(const char *finalString)
     /** Descobrir o bottleneck **/
 
     // Array para somar quantas tempo de trabalho faltam em cada máquina
-    int machineRemainingTime[numMachines];
+    int machineRemainingTime[MAX_OPS];
     memset(machineRemainingTime, 0, sizeof(machineRemainingTime));
 
+// OMP: Divide a contagem pelas várias threads
+#pragma omp parallel for
     // Para cada job
     for (int j = 0; j < numJobs; j++)
     {
@@ -184,6 +184,9 @@ void fileToArray(const char *finalString)
       {
         int machine = jobMachines[j][op]; // qual máquina para esta operação
         int duration = operationDurations[j][op];
+
+// OMP: Garante que duas threads não somam na mesma máquina ao mesmo tempo
+#pragma omp atomic
         machineRemainingTime[machine] += duration; // somamos o tempo que falta para esta máquina trabalhar
       }
     }
@@ -191,29 +194,59 @@ void fileToArray(const char *finalString)
     /** Escolher o melhor job para entrar**/
 
     int bestJob = -1;
-    int bestStartTime = 9999999; // Iniciar com um valor muito alto para encontrar o mínimo
+    int bestScore = 9999999; // Iniciar com um valor muito alto para encontrar o mínimo
 
-    // vamos testar, para cada job, o que aconteceria se o agendássemos agora
-#pragma omp parallel for reduction(min : bestStartTime)
-    for (int j = 0; j < numJobs; j++)
+#pragma omp parallel
     {
-      // só testamos os jobs que ainda não terminaram todas as suas operações
-      if (currentOperation[j] < numMachines)
+      int local_bestJob = -1;
+      int local_bestScore = 9999999;
+      int thread_id = omp_get_thread_num();
+
+// OMP: Divide os jobs pelas threads para testar mais rápido
+#pragma omp for
+      // vamos testar, para cada job, o que aconteceria se o agendássemos agora
+      for (int j = 0; j < numJobs; j++)
       {
-        int op = currentOperation[j];                              // próxima operação a ser agendada para este job
-        int machine = jobMachines[j][currentOperation[j]];         // máquina da próxima operação
-        int duration = operationDurations[j][currentOperation[j]]; // duração da próxima operação
-
-        // O tempo de início seria o máximo entre quando a máquina fica livre e quando o job fica livre
-        int startTime = getMax(machinesFreeTime[machine], jobsFreeTime[j]);
-
-        // Se este job tem um tempo de início melhor, escolhemos ele
-        if (startTime < bestStartTime)
+        // só testamos os jobs que ainda não terminaram todas as suas operações
+        if (currentOperation[j] < numMachines)
         {
-          bestStartTime = startTime;
-          bestJob = j;
+          int op = currentOperation[j];                              // próxima operação a ser agendada para este job
+          int machine = jobMachines[j][currentOperation[j]];         // máquina da próxima operação
+          int duration = operationDurations[j][currentOperation[j]]; // duração da próxima operação
+
+          printf("[Thread %d] A avaliar o Job %d para a Maquina %d...\n", thread_id, j, machine);
+
+          // O tempo de início seria o máximo entre quando a máquina fica livre e quando o job fica livre
+          int startTime = getMax(machinesFreeTime[machine], jobsFreeTime[j]);
+          int endTime = startTime + duration;
+
+          // A FÓRMULA DO SHIFTING BOTTLENECK (Recuperada)
+          int score = endTime - machineRemainingTime[machine];
+
+          // Se este job tem um tempo de início melhor, escolhemos ele
+          if (score < local_bestScore || (score == local_bestScore && j < local_bestJob))
+          {
+            local_bestScore = score;
+            local_bestJob = j;
+          }
         }
       }
+
+// OMP: Junta os resultados das threads para encontrar o vencedor absoluto
+#pragma omp critical
+      {
+        if (local_bestScore < bestScore || (local_bestScore == bestScore && local_bestJob < bestJob))
+        {
+          bestScore = local_bestScore;
+          bestJob = local_bestJob;
+        }
+      }
+    }
+
+    if (bestJob == -1)
+    {
+      printf("\n[Erro] Falha de memoria OpenMP. Nenhum Job selecionado.\n");
+      break;
     }
 
     /** Agendar o melhor job encontrado **/
@@ -249,50 +282,67 @@ void fileToArray(const char *finalString)
       jobsDone++; // este job já terminou todas as suas operações, incrementamos o contador de jobs feitos
     }
 
-    // Print job machines
-    printf("\nJob Machines:\n");
+    printf("\n[Debug] Job %d agendado na maquina %d, operacao %d, das %d as %d. Makespan atual: %d\n",
+           bestJob, machine, op, startTime, endTime, totalMakespan);
+    // 1. Imprime a primeira linha: O tempo total (Makespan)
+    printf("%d\n", totalMakespan);
+
+    // 2. Imprime os tempos de início (apenas o início!) de cada operação
     for (int j = 0; j < numJobs; j++)
     {
-      printf("Job %d: ", j);
       for (int op = 0; op < numMachines; op++)
       {
-        printf("%d ", jobMachines[j][op]);
-      }
-      printf("\n");
-    }
-
-    // Print operation durations
-    printf("\nOperation Durations:\n");
-    for (int j = 0; j < numJobs; j++)
-    {
-      printf("Job %d: ", j);
-      for (int op = 0; op < numMachines; op++)
-      {
-        printf("%d ", operationDurations[j][op]);
-      }
-      printf("\n");
-    }
-
-    // Print auxiliary array with machine free times
-    printf("\nMachines Free Time:\n");
-    for (int m = 0; m < numMachines; m++)
-    {
-      printf("Machine %d: %d\n", m, machinesFreeTime[m]);
-    }
-
-    // Print the schedule array with entry and exit times
-    printf("\nSchedule Array (Entry and Exit Times):\n");
-    for (int j = 0; j < numJobs; j++)
-    {
-      printf("Job %d: ", j);
-      for (int op = 0; op < numMachines; op++)
-      {
-        printf("M%d:[%d-%d] ", jobMachines[j][op], scheduleArray[j][2 * op],
-               scheduleArray[j][2 * op + 1]);
+        printf("%d ", scheduleArray[j][2 * op]);
       }
       printf("\n");
     }
   }
+
+  // Print job machines
+  printf("\nJob Machines:\n");
+  for (int j = 0; j < numJobs; j++)
+  {
+    printf("Job %d: ", j);
+    for (int op = 0; op < numMachines; op++)
+    {
+      printf("%d ", jobMachines[j][op]);
+    }
+    printf("\n");
+  }
+
+  // Print operation durations
+  printf("\nOperation Durations:\n");
+  for (int j = 0; j < numJobs; j++)
+  {
+    printf("Job %d: ", j);
+    for (int op = 0; op < numMachines; op++)
+    {
+      printf("%d ", operationDurations[j][op]);
+    }
+    printf("\n");
+  }
+
+  // Print auxiliary array with machine free times
+  printf("\nMachines Free Time:\n");
+  for (int m = 0; m < numMachines; m++)
+  {
+    printf("Machine %d: %d\n", m, machinesFreeTime[m]);
+  }
+
+  // Print the schedule array with entry and exit times
+  printf("\nSchedule Array (Entry and Exit Times):\n");
+  for (int j = 0; j < numJobs; j++)
+  {
+    printf("Job %d: ", j);
+    for (int op = 0; op < numMachines; op++)
+    {
+      printf("M%d:[%d-%d] ", jobMachines[j][op], scheduleArray[j][2 * op],
+             scheduleArray[j][2 * op + 1]);
+    }
+    printf("\n");
+  }
+
+  printf("\nTempo Total da Fabrica (Makespan): %d\n", totalMakespan);
 }
 
 //_____________________________________________________________________________________________________________________________________________________
@@ -324,20 +374,19 @@ int main()
 
   printf("File content:\n%s\n", finalString);
 
-  // Call the function to convert the file content to an array (not implemented
-  // yet)
-  fileToArray(finalString);
-
   // Start the timer
 
   clock_t start_clock = clock();
+  // Call the function to convert the file content to an array (not implemented
+  // yet)
+  fileToArray(finalString);
 
   // Stop the timer
   clock_t end_clock = clock();
 
   // time_spent = end_clock - start_clock divided by CLOCKS_PER_SEC to get the
   // time in seconds
-  double time_spent = (end_clock - start_clock) / 1000.0;
+  double time_spent = (double)(end_clock - start_clock) / CLOCKS_PER_SEC;
 
   // Print the time spent in seconds
   printf("Execution time: %f seconds \n", time_spent);
