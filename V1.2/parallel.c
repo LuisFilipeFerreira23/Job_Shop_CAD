@@ -4,6 +4,14 @@
 #include <stdlib.h>
 #include <omp.h>
 
+/* Uncomment the following block to enable the OMP PARALLEL FOR REDUCE version of the algorithm. 
+Make sure to comment out the original parallel region and sequential update in the main loop as well.
+/ OMP PARALLEL FOR REDUCE ------------------------------------------------------------------------------>
+#include <stdint.h>
+// OMP PARALLEL FOR REDUCE ------------------------------------------------------------------------------>
+*/
+
+
 #define MAX_JOBS 750
 #define MAX_MACHINES 750
 #define MAX_OPS 600000
@@ -78,8 +86,7 @@ int main(int argc, char *argv[])
     }
     fclose(file);
 
-
-// Algoritmo comum //
+    // Algoritmo comum //
     int totalOps = numJobs * numMachines;
     double totalTime = 0.0;
 
@@ -156,43 +163,103 @@ int main(int argc, char *argv[])
             }
         }
 
+        /* Uncomment the following block to enable the OMP PARALLEL FOR REDUCE version of the algorithm. 
+        Make sure to comment out the original parallel region and sequential update in the main loop as well.
+        // OMP PARALLEL FOR REDUCE ------------------------------------------------------------------------------>
+        // 1. Initialize a 64-bit unsigned integer to the maximum possible value
+        uint64_t globalBestPacked = UINT64_MAX;
+
+        // 2. Apply the standard reduction clause to the packed variable
+#pragma omp parallel for reduction(min : globalBestPacked)
+        for (int j = 0; j < numJobs; j++)
+        {
+            if (opsDone[j] < numMachines)
+            {
+                int currentIdx = firstOpOfJob[j];
+                for (int s = 0; s < opsDone[j]; s++)
+                {
+                    currentIdx = memoryPool[currentIdx].nextOpIndex;
+                }
+
+                int mID = memoryPool[currentIdx].machineID;
+                int pStart = (jobReadyTime[j] > machineFreeTime[mID]) ? jobReadyTime[j] : machineFreeTime[mID];
+
+                // 3. Pack the data: Shift time left by 32 bits, then apply a bitwise OR with the Job ID
+                uint64_t localPacked = ((uint64_t)pStart << 32) | (uint32_t)j;
+
+                // 4. Lock-free local update
+                if (localPacked < globalBestPacked)
+                {
+                    globalBestPacked = localPacked;
+                }
+            }
+        } // Implicit barrier and safe OpenMP reduction occur here
+
+        // 5. Unpack the results sequentially
+        if (globalBestPacked != UINT64_MAX)
+        {
+            // Extract upper 32 bits (Time) by shifting right
+            int globalEarliestStart = (int)(globalBestPacked >> 32);
+
+            // Extract lower 32 bits (Job ID) by masking with 0xFFFFFFFF
+            int globalBestJob = (int)(globalBestPacked & 0xFFFFFFFF);
+
+            // --- Sequential State Update ---
+            int currentIdx = firstOpOfJob[globalBestJob];
+            for (int s = 0; s < opsDone[globalBestJob]; s++)
+            {
+                currentIdx = memoryPool[currentIdx].nextOpIndex;
+            }
+            memoryPool[currentIdx].startTime = globalEarliestStart;
+            int finish = globalEarliestStart + memoryPool[currentIdx].duration;
+
+            machineFreeTime[memoryPool[currentIdx].machineID] = finish;
+            jobReadyTime[globalBestJob] = finish;
+
+            opsDone[globalBestJob]++;
+            completedTotal++;
+        }
+    }
+    // OMP PARALLEL FOR REDUCE ------------------------------------------------------------------------------>
+*/
+
         // 3.3.5 End Timing
         double end = omp_get_wtime();
         totalTime += (end - start);
     }
 
     // --- 3.4 Calculate Metrics ---
-        double averageTime = totalTime / numRepetitions;
-        printf("Average execution time (%d repetitions): %f seconds\n", numRepetitions, averageTime);
+    double averageTime = totalTime / numRepetitions;
+    printf("Average execution time (%d repetitions): %f seconds\n", numRepetitions, averageTime);
 
     // --- 3.5 Write Output to File ---
-        int makespan = 0;
-        for (int i = 0; i < numMachines; i++)
+    int makespan = 0;
+    for (int i = 0; i < numMachines; i++)
+    {
+        if (machineFreeTime[i] > makespan)
+            makespan = machineFreeTime[i];
+    }
+
+    FILE *outFile = fopen(outputFileName, "w");
+    if (!outFile)
+    {
+        printf("Error: Could not create output file %s\n", outputFileName);
+        return 1;
+    }
+
+    fprintf(outFile, "%d\n", makespan);
+
+    for (int i = 0; i < numJobs; i++)
+    {
+        int currentIdx = firstOpOfJob[i];
+        while (currentIdx != -1)
         {
-            if (machineFreeTime[i] > makespan)
-                makespan = machineFreeTime[i];
+            fprintf(outFile, "%d ", memoryPool[currentIdx].startTime);
+            currentIdx = memoryPool[currentIdx].nextOpIndex;
         }
+        fprintf(outFile, "\n");
+    }
 
-        FILE *outFile = fopen(outputFileName, "w");
-        if (!outFile)
-        {
-            printf("Error: Could not create output file %s\n", outputFileName);
-            return 1;
-        }
-
-        fprintf(outFile, "%d\n", makespan);
-
-        for (int i = 0; i < numJobs; i++)
-        {
-            int currentIdx = firstOpOfJob[i];
-            while (currentIdx != -1)
-            {
-                fprintf(outFile, "%d ", memoryPool[currentIdx].startTime);
-                currentIdx = memoryPool[currentIdx].nextOpIndex;
-            }
-            fprintf(outFile, "\n");
-        }
-
-        fclose(outFile);
-        return 0;
+    fclose(outFile);
+    return 0;
 }
