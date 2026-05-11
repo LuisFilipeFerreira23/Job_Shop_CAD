@@ -11,7 +11,6 @@ Make sure to comment out the original parallel region and sequential update in t
 // OMP PARALLEL FOR REDUCE ------------------------------------------------------------------------------>
 */
 
-
 #define MAX_JOBS 750
 #define MAX_MACHINES 750
 #define MAX_OPS 600000
@@ -90,6 +89,14 @@ int main(int argc, char *argv[])
     int totalOps = numJobs * numMachines;
     double totalTime = 0.0;
 
+    // Array to store the exact execution time of each repetition
+    double *repTimes = (double *)malloc(numRepetitions * sizeof(double));
+    if (!repTimes)
+    {
+        printf("Error: Memory allocation failed for repTimes.\n");
+        return 1;
+    }
+
     // --- 3.3 Performance Measurement Loop ---
     for (int rep = 0; rep < numRepetitions; rep++)
     {
@@ -115,9 +122,11 @@ int main(int argc, char *argv[])
             int globalEarliestStart = 2147483647;
 
             // --- PARALLEL REGION: Search for the next best operation ---
+            // ---> FORK: OpenMP wakes up the team of worker threads here <---
 #pragma omp parallel for
             for (int j = 0; j < numJobs; j++)
             {
+                // All threads are now executing simultaneously, dividing the 'numJobs' iterations.
                 if (opsDone[j] < numMachines)
                 {
                     // Traverse logical linked list to find current operation
@@ -141,6 +150,7 @@ int main(int argc, char *argv[])
                     }
                 }
             }
+            // ---> Worker threads park/terminate.<---
             // --- END PARALLEL REGION ---
 
             // --- 3.3.4 Sequential State Update ---
@@ -225,7 +235,10 @@ int main(int argc, char *argv[])
 
         // 3.3.5 End Timing
         double end = omp_get_wtime();
-        totalTime += (end - start);
+        double currentRepTime = end - start;
+
+        repTimes[rep] = currentRepTime; // Store in the array
+        totalTime += currentRepTime;    // Add to total for the average
     }
 
     // --- 3.4 Calculate Metrics ---
@@ -260,6 +273,17 @@ int main(int argc, char *argv[])
         fprintf(outFile, "\n");
     }
 
+    // --- Append the Performance Report ---
+    fprintf(outFile, "\n--- Performance Analysis ---\n");
+    fprintf(outFile, "Threads used: %d\n", numThreads);
+    for (int r = 0; r < numRepetitions; r++)
+    {
+        fprintf(outFile, "Repetition %d: %f seconds\n", r + 1, repTimes[r]);
+    }
+    fprintf(outFile, "Average Execution Time: %f seconds\n", averageTime);
+
     fclose(outFile);
+    free(repTimes); // Always free dynamically allocated memory
+
     return 0;
 }
