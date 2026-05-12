@@ -1,5 +1,3 @@
-// 1. INCLUDES & MACROS
-// ==============================================================================
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -8,8 +6,6 @@
 #define MAX_MACHINES 750
 #define MAX_OPS 600000
 
-// 2. DATA STRUCTURES & GLOBAL MEMORY
-// ==============================================================================
 typedef struct
 {
     int machineID;
@@ -18,19 +14,14 @@ typedef struct
     int nextOpIndex;
 } Operation;
 
-// Array-based linked list
 Operation memoryPool[MAX_OPS];
 int firstOpOfJob[MAX_JOBS];
 int machineFreeTime[MAX_MACHINES];
 int jobReadyTime[MAX_JOBS];
 int opsDone[MAX_JOBS];
 
-// 3. MAIN PROGRAM
-// ==============================================================================
 int main(int argc, char *argv[])
 {
-
-    // --- 3.1 Argument Validation ---
     if (argc != 3)
     {
         printf("Usage: %s <input_file.jss> <output_file.txt>\n", argv[0]);
@@ -40,7 +31,6 @@ int main(int argc, char *argv[])
     char *inputFileName = argv[1];
     char *outputFileName = argv[2];
 
-    // --- 3.2 File Parsing ---
     FILE *file = fopen(inputFileName, "r");
     if (!file)
     {
@@ -69,18 +59,13 @@ int main(int argc, char *argv[])
     }
     fclose(file);
 
-    // 3.3 Declare timespec structures
     struct timespec start, end;
 
-    // 3.3.1 Capture the start time
     clock_gettime(CLOCK_MONOTONIC, &start);
 
-
-// ALGORITMO COMUM //
     int totalOps = numJobs * numMachines;
     int completedTotal = 0;
     
-    // 3.4 Core Scheduling Loop
     while (completedTotal < totalOps)
     {
         int globalBestJob = -1;
@@ -107,7 +92,6 @@ int main(int argc, char *argv[])
             }
         }
 
-        // --- 3.5 Sequential State Update ---
         if (globalBestJob != -1)
         {
             int currentIdx = firstOpOfJob[globalBestJob];
@@ -126,14 +110,11 @@ int main(int argc, char *argv[])
         }
     }
 
-    // 3.3.3 Capture the end time
     clock_gettime(CLOCK_MONOTONIC, &end);
     
-    // 3.3.4 Calculate total elapsed time in seconds
     double totalTime = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
     printf("Execution time: %f seconds\n", totalTime);
     
-    // --- 3.6 Write Output to File ---
     int makespan = 0;
     for (int i = 0; i < numMachines; i++)
     {
